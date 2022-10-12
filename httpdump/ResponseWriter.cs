@@ -1,63 +1,23 @@
-using System.Text.Json;
+using System.Text;
+using HttpDump.Models;
 
-namespace httpdump;
+namespace HttpDump;
 
-public class ResponseWriter
+public record ResponseWriter
 {
-    private readonly List<CacheItem> _cache = new();
-
-    public async Task Write(HttpContext context)
+    public async Task WriteAsync(ResponseInfo response, HttpResponse proxyResponse)
     {
-        using var sr = new StreamReader(context.Request.Body);
-        var requestInfo = new RequestInfo(
-            context.Request.Method,
-            context.Request.Protocol,
-            context.Request.Path.Value,
-            context.Request.QueryString.Value,
-            context.Request.Headers.Keys.Select(key => new
-            {
-                key, 
-                values=context.Request.Headers[key].ToArray()
-            }).ToDictionary(k => k.key, s => s.values),
-            await sr.ReadToEndAsync());
-        
-        var hash = MD5Hasher.Hash(requestInfo);
-        var cacheItem = _cache.FirstOrDefault(f => f.Hash == hash);
-        if (cacheItem is null)
-            _cache.Add(new CacheItem(hash, 1, requestInfo));
-        else
-            cacheItem.Count++;
-        
-        await context.Response.WriteAsync("saved to cache");
-    }
+        proxyResponse.StatusCode = (response.StatusCode);
 
-    public async Task Cache(HttpContext context)
-    {
-        context.Response.ContentType = "application/json";
-        await context.Response.WriteAsync(JsonSerializer.Serialize(_cache, new JsonSerializerOptions
-        {
-            WriteIndented = true
-        }));
-    }
+        if (response.ContentType != null)
+            proxyResponse.ContentType = response.ContentType;
 
-    public async Task Clear(HttpContext context)
-    {
-        var count = _cache.Count;
-        _cache.Clear();
-        await context.Response.WriteAsync($"Removed {count} items from cache");
-    }
-    
-    record RequestInfo(
-        string RequestMethod, 
-        string RequestProtocol,
-        string? RequestPath,
-        string? QueryStringValue,
-        Dictionary<string, string[]> Headers,
-        string Body);
+        if(response.ContentEncoding.Any())
+            proxyResponse.Headers.TryAdd("Content-Encoding", string.Join(',', response.ContentEncoding));
 
-    record CacheItem(string Hash, int Count, RequestInfo Item)
-    {
-        public int Count { get; set; } = Count;
+        var bytes = Encoding.UTF8.GetBytes(response.Content);
+            
+        await using var stream = new MemoryStream(bytes);
+        await stream.CopyToAsync(proxyResponse.Body);
     }
 }
-

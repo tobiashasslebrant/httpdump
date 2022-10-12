@@ -1,6 +1,8 @@
 using System.Text;
 using System.Text.Json;
 
+namespace HttpDump;
+
 public class MD5Hasher
 {
     public static string Hash<T>(T obj) 

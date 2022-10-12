@@ -1,0 +1,19 @@
+works in two ways
+
+1. httpdump
+- logs calls to service and save it in inmemory cache.
+
+2. reverseProxy
+- activates if appsettings.ReverseProxyHost is set (appsettings.ReverseProxyPort will be defaulted to 80 if not set)
+- logs calls to service and redirect call to underlying service. 
+- Saves response from underlying service and use the cached response in consecutive calls
+- InMemorycache is used by default. If appsettings.PostgresConnectionString is set a postgres is used as cache instead.
+
+
+magic urls:
+/httpdump/cache
+    - Shows current cache
+/httpdump/clear
+    - clears cache
+    
+
