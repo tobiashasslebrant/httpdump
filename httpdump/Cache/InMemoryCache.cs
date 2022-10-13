@@ -9,12 +9,12 @@ public record InMemoryResponseCache : IResponseCache
     public async Task<bool> Contains(string hash) 
         => await Task.FromResult(_cacheItems.Any(a => a.Hash == hash));
 
-    public async Task<ResponseInfo> Get(string hash)
+    public async Task<ResponseInfo> GetResponse(string hash)
         => await Task.FromResult(_cacheItems.First(a => a.Hash == hash).ResponseInfo);
 
-    public async Task Write(string hash, RequestInfo request, ResponseInfo response)
+    public async Task Write(ResponseCacheItem item)
     {
-        _cacheItems.Add(new ResponseCacheItem(hash, request, response));
+        _cacheItems.Add(item);
         await Task.CompletedTask;
     }   
 

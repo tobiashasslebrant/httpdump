@@ -44,7 +44,6 @@ public record DumpHandler(RequestInfoFactory RequestInfoFactory)
             _cache.Clear();
             await context.Response.WriteAsync($"Removed {count} items from cache");
         }
-        
     }
     
     record RequestCache(string Hash, int Count, RequestInfo Item)

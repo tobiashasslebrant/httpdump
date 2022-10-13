@@ -30,9 +30,8 @@ public record PostgresCache(AppConfig Config) : IResponseCache
         return value > 0;
     }
 
-    public async Task<ResponseInfo> Get(string hash)
+    public async Task<ResponseInfo> GetResponse(string hash)
     {
-        
         await using var connection = new NpgsqlConnection(Config.PostgresConnectionString);
         await connection.OpenAsync();
         await using var command = new NpgsqlCommand($@"
@@ -45,9 +44,12 @@ public record PostgresCache(AppConfig Config) : IResponseCache
         return MapResponse(reader);
     }
     
-    public async Task Write(string hash, RequestInfo request, ResponseInfo response)
+    public async Task Write(ResponseCacheItem item)
     {
         await Initialize();
+        var hash = item.Hash;
+        var request = item.RequestInfo;
+        var response = item.ResponseInfo;
         var headers = string.Join(';', request.Headers.Select(s => $"{s.Key}:{string.Join(',', s.Value)}"));
         await using var connection = new NpgsqlConnection(Config.PostgresConnectionString);
         await connection.OpenAsync();

@@ -5,14 +5,13 @@ namespace HttpDump.ReverseProxy;
 
 public record ReverseProxyHandler(
     ReverseProxy ReverseProxy,
-    AppConfig Config,
     ResponseWriter ResponseWriter,
     ResponseInfoFactory ResponseInfoFactory,
     ResponseCacheFactory CacheFactory)
 {
     public async Task Handle(HttpContext context)
     {
-        var cache = CacheFactory.Create(Config);
+        var cache = CacheFactory.Create();
 
         if (context.Request.Path.Equals("/httpdump/cache"))
             await Cache();
@@ -42,12 +41,12 @@ public record ReverseProxyHandler(
 
             ResponseInfo responseInfo;
             if (await cache.Contains(hash))
-                responseInfo = await cache.Get(hash);
+                responseInfo = await cache.GetResponse(hash);
             else
             {
                 var httpResponseMessage = await ReverseProxy.Send(context.Request, context.Response);
                 responseInfo = await ResponseInfoFactory.Create(httpResponseMessage);
-                await cache.Write(hash, requestInfo, responseInfo);
+                await cache.Write(new ResponseCacheItem(hash, requestInfo, responseInfo));
             }
 
             await ResponseWriter.WriteAsync(responseInfo, context.Response);

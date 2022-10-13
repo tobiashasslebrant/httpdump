@@ -5,31 +5,30 @@ using HttpDump.ReverseProxy;
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Services.AddTransient<DumpHandler>();
+builder.Services.AddTransient<DumpHandler>()
+    .AddTransient<ReverseProxyHandler>()
+    .AddTransient<ReverseProxy>()
+    .AddTransient<ResponseCacheFactory>()
+    .AddTransient<ResponseWriter>()
+    .AddTransient<ResponseInfoFactory>()
+    .AddTransient<RequestInfoFactory>()
+    .AddTransient<AppConfig>()
+    .AddTransient<PostgresCache>()
+    .AddSingleton<InMemoryResponseCache>();
 
-builder.Services.AddTransient<ReverseProxyHandler>();
-builder.Services.AddTransient<ReverseProxy>();
-
-builder.Services.AddTransient<ResponseCacheFactory>();
-builder.Services.AddTransient<ResponseWriter>();
-
-builder.Services.AddTransient<ResponseInfoFactory>();
-builder.Services.AddTransient<RequestInfoFactory>();
-
-builder.Services.AddTransient<AppConfig>();
-builder.Services.AddTransient<PostgresCache>();
-builder.Services.AddSingleton<InMemoryResponseCache>();
-
+builder.Configuration.AddEnvironmentVariables();
 builder.Services.AddHttpClient("HttpClientWithSSLUntrusted").ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
-{
-    ClientCertificateOptions = ClientCertificateOption.Manual,
-    AllowAutoRedirect = true,
-    AutomaticDecompression = DecompressionMethods.GZip | DecompressionMethods.Deflate,
-    ServerCertificateCustomValidationCallback = (_, _, _, _) => true
-});
+    {
+        ClientCertificateOptions = ClientCertificateOption.Manual,
+        AllowAutoRedirect = true,
+        AutomaticDecompression = DecompressionMethods.GZip | DecompressionMethods.Deflate,
+        ServerCertificateCustomValidationCallback = (_, _, _, _) => true
+    });
+
 builder.Services.AddControllers();
 
 var app = builder.Build();
+
 var config = app.Services.GetService<AppConfig>();
 var reverseProxyHandler = app.Services.GetService<ReverseProxyHandler>();
 var dumpHandler = app.Services.GetService<DumpHandler>();
