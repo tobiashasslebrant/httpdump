@@ -58,7 +58,8 @@ app.Use(async (context, next) =>
                 isReverseProxy = runtimeConfig.IsReverseProxy,
                 reverseProxyHost = runtimeConfig.ReverseProxyHost,
                 reverseProxyPort = runtimeConfig.ReverseProxyPort,
-                reverseProxyScheme = runtimeConfig.ReverseProxyScheme
+                reverseProxyScheme = runtimeConfig.ReverseProxyScheme,
+                reverseProxyCacheEnabled = runtimeConfig.ReverseProxyCacheEnabled
             }));
             return;
         }
@@ -72,6 +73,7 @@ app.Use(async (context, next) =>
                 var port = body.GetProperty("reverseProxyPort").GetInt32();
                 var scheme = body.TryGetProperty("reverseProxyScheme", out var schemeProp)
                     ? schemeProp.GetString()?.ToLowerInvariant() : "http";
+                var cacheEnabled = !body.TryGetProperty("reverseProxyCacheEnabled", out var cacheProp) || cacheProp.GetBoolean();
 
                 if (!string.IsNullOrEmpty(host) && (port < 1 || port > 65535))
                 {
@@ -80,7 +82,7 @@ app.Use(async (context, next) =>
                     return;
                 }
 
-                runtimeConfig.Update(string.IsNullOrEmpty(host) ? null : host, port, scheme ?? "http");
+                runtimeConfig.Update(string.IsNullOrEmpty(host) ? null : host, port, scheme ?? "http", cacheEnabled);
                 await inMemoryCache.Clear();
 
                 context.Response.ContentType = "application/json";
@@ -89,7 +91,8 @@ app.Use(async (context, next) =>
                     isReverseProxy = runtimeConfig.IsReverseProxy,
                     reverseProxyHost = runtimeConfig.ReverseProxyHost,
                     reverseProxyPort = runtimeConfig.ReverseProxyPort,
-                    reverseProxyScheme = runtimeConfig.ReverseProxyScheme
+                    reverseProxyScheme = runtimeConfig.ReverseProxyScheme,
+                    reverseProxyCacheEnabled = runtimeConfig.ReverseProxyCacheEnabled
                 }));
             }
             catch (Exception)

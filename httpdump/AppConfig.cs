@@ -7,4 +7,5 @@ public record AppConfig(IConfiguration Configuration, RuntimeConfig RuntimeConfi
     public string? PostgresConnectionString => Configuration["PostgresConnectionString"];
     public int ReverseProxyPort => RuntimeConfig.ReverseProxyPort;
     public string ReverseProxyScheme => RuntimeConfig.ReverseProxyScheme;
+    public bool ReverseProxyCacheEnabled => RuntimeConfig.ReverseProxyCacheEnabled;
 };

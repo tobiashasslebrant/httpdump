@@ -7,7 +7,8 @@ public record ReverseProxyHandler(
     ReverseProxy ReverseProxy,
     ResponseWriter ResponseWriter,
     ResponseInfoFactory ResponseInfoFactory,
-    ResponseCacheFactory CacheFactory)
+    ResponseCacheFactory CacheFactory,
+    AppConfig AppConfig)
 {
     public async Task Handle(HttpContext context)
     {
@@ -39,7 +40,7 @@ public record ReverseProxyHandler(
             var requestInfo = await requestInfoFactory.Create(context.Request);
             var hash = MD5Hasher.Hash(requestInfo);
 
-            if (await cache.Contains(hash))
+            if (AppConfig.ReverseProxyCacheEnabled && await cache.Contains(hash))
             {
                 var responseInfo = await cache.GetResponse(hash);
                 await ResponseWriter.WriteAsync(responseInfo, context.Response);
@@ -47,8 +48,11 @@ public record ReverseProxyHandler(
             else
             {
                 var httpResponseMessage = await ReverseProxy.Send(context.Request, context.Response);
-                var responseInfo = await ResponseInfoFactory.Create(httpResponseMessage);
-                await cache.Write(new ResponseCacheItem(hash, requestInfo, responseInfo));
+                if (AppConfig.ReverseProxyCacheEnabled)
+                {
+                    var responseInfo = await ResponseInfoFactory.Create(httpResponseMessage);
+                    await cache.Write(new ResponseCacheItem(hash, requestInfo, responseInfo));
+                }
             }
         }
     }

@@ -19,7 +19,8 @@ public static class UiPage
             .btn-danger { background: #c0392b; color: #fff; }
             .btn-default { background: #e0e0e0; color: #222; }
             .btn-primary { background: #2980b9; color: #fff; }
-            label { font-size: .875rem; }
+            label { font-size: .875rem; display: inline-flex; align-items: center; gap: .3rem; }
+            input[type=checkbox] { margin: 0; cursor: pointer; }
             #status { font-size: .8rem; opacity: .7; }
             .mode-badge { font-size: .75rem; padding: .2rem .6rem; border-radius: 10px; font-weight: 600; }
             .mode-dump  { background: #e8f4f8; color: #1a5276; }
@@ -69,7 +70,7 @@ public static class UiPage
           <div class="toolbar">
             <span id="mode-badge"></span>
             <span id="status"></span>
-            <label><input type="checkbox" id="auto-refresh" /> Auto-refresh</label>
+            <label><input type="checkbox" id="auto-refresh" />Auto-refresh</label>
             <button class="btn-default" onclick="loadCache()">Refresh</button>
             <button class="btn-danger" onclick="clearCache()">Clear cache</button>
           </div>
@@ -79,7 +80,7 @@ public static class UiPage
             <h2>Proxy settings</h2>
             <div class="config-form">
               <div class="field">
-                <label><input type="checkbox" id="cfg-enabled" onchange="onProxyToggle()" /> Enable reverse proxy</label>
+                <label><input type="checkbox" id="cfg-enabled" onchange="onProxyToggle()" />Enable reverse proxy</label>
               </div>
               <div class="field">
                 <label for="cfg-scheme">Scheme</label>
@@ -97,6 +98,9 @@ public static class UiPage
                 <input id="cfg-port" name="port" type="number" min="1" max="65535" placeholder="80" disabled />
               </div>
               <button class="btn-primary" onclick="saveConfig()">Save</button>
+              <div class="field">
+                <label><input type="checkbox" id="cfg-cache" checked disabled />Cache responses</label>
+              </div>
             </div>
           </div>
           <div id="items"><p class="empty">Loading…</p></div>
@@ -122,9 +126,11 @@ public static class UiPage
             document.getElementById('cfg-scheme').value = cfg.reverseProxyScheme || 'http';
             document.getElementById('cfg-host').value = cfg.reverseProxyHost || '';
             document.getElementById('cfg-port').value = cfg.reverseProxyPort || 80;
+            document.getElementById('cfg-cache').checked = cfg.reverseProxyCacheEnabled !== false;
             document.getElementById('cfg-scheme').disabled = !enabled;
             document.getElementById('cfg-host').disabled = !enabled;
             document.getElementById('cfg-port').disabled = !enabled;
+            document.getElementById('cfg-cache').disabled = !enabled;
             const badge = document.getElementById('mode-badge');
             badge.textContent = enabled ? 'Reverse proxy' : 'Dump mode';
             badge.className = 'mode-badge ' + (enabled ? 'mode-proxy' : 'mode-dump');
@@ -135,6 +141,7 @@ public static class UiPage
             document.getElementById('cfg-scheme').disabled = !enabled;
             document.getElementById('cfg-host').disabled = !enabled;
             document.getElementById('cfg-port').disabled = !enabled;
+            document.getElementById('cfg-cache').disabled = !enabled;
           }
 
           function onSchemeChange() {
@@ -151,13 +158,14 @@ public static class UiPage
             const scheme = document.getElementById('cfg-scheme').value || 'http';
             const host = enabled ? document.getElementById('cfg-host').value.trim() : '';
             const port = parseInt(document.getElementById('cfg-port').value, 10) || 80;
+            const cacheEnabled = document.getElementById('cfg-cache').checked;
             if (enabled && !host) { alert('Host is required when reverse proxy is enabled'); return; }
             if (enabled && (port < 1 || port > 65535)) { alert('Port must be between 1 and 65535'); return; }
             try {
               const res = await fetch('/httpdump/config', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ reverseProxyHost: host, reverseProxyPort: port, reverseProxyScheme: scheme })
+                body: JSON.stringify({ reverseProxyHost: host, reverseProxyPort: port, reverseProxyScheme: scheme, reverseProxyCacheEnabled: cacheEnabled })
               });
               if (!res.ok) { alert('Failed to save config: ' + await res.text()); return; }
               const cfg = await res.json();
