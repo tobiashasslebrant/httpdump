@@ -39,17 +39,17 @@ public record ReverseProxyHandler(
             var requestInfo = await requestInfoFactory.Create(context.Request);
             var hash = MD5Hasher.Hash(requestInfo);
 
-            ResponseInfo responseInfo;
             if (await cache.Contains(hash))
-                responseInfo = await cache.GetResponse(hash);
+            {
+                var responseInfo = await cache.GetResponse(hash);
+                await ResponseWriter.WriteAsync(responseInfo, context.Response);
+            }
             else
             {
                 var httpResponseMessage = await ReverseProxy.Send(context.Request, context.Response);
-                responseInfo = await ResponseInfoFactory.Create(httpResponseMessage);
+                var responseInfo = await ResponseInfoFactory.Create(httpResponseMessage);
                 await cache.Write(new ResponseCacheItem(hash, requestInfo, responseInfo));
             }
-
-            await ResponseWriter.WriteAsync(responseInfo, context.Response);
         }
     }
 }

@@ -30,6 +30,7 @@ public static class UiPage
             .config-form { display: flex; gap: .75rem; align-items: flex-end; flex-wrap: wrap; }
             .config-form .field { display: flex; flex-direction: column; gap: .25rem; }
             .config-form input { padding: .375rem .6rem; border: 1px solid #ccc; border-radius: 4px; font-size: .875rem; width: 220px; }
+            .config-form select { padding: .375rem .6rem; border: 1px solid #ccc; border-radius: 4px; font-size: .875rem; background: #fff; }
             .config-form input[name=port] { width: 90px; }
             #items { display: flex; flex-direction: column; gap: .5rem; }
             .empty { color: #888; text-align: center; padding: 2rem; background: #fff; border-radius: 6px; border: 1px solid #eee; }
@@ -81,6 +82,13 @@ public static class UiPage
                 <label><input type="checkbox" id="cfg-enabled" onchange="onProxyToggle()" /> Enable reverse proxy</label>
               </div>
               <div class="field">
+                <label for="cfg-scheme">Scheme</label>
+                <select id="cfg-scheme" disabled onchange="onSchemeChange()">
+                  <option value="http">http</option>
+                  <option value="https">https</option>
+                </select>
+              </div>
+              <div class="field">
                 <label for="cfg-host">Host</label>
                 <input id="cfg-host" name="host" type="text" placeholder="e.g. api.example.com" disabled />
               </div>
@@ -96,19 +104,25 @@ public static class UiPage
         <script>
           let autoRefreshTimer = null;
 
+          let currentConfig = {};
+
           async function loadConfig() {
             try {
               const res = await fetch('/httpdump/config');
               const cfg = await res.json();
+              currentConfig = cfg;
               applyConfig(cfg);
             } catch (e) { /* ignore */ }
           }
 
           function applyConfig(cfg) {
+            currentConfig = cfg;
             const enabled = cfg.isReverseProxy === true;
             document.getElementById('cfg-enabled').checked = enabled;
+            document.getElementById('cfg-scheme').value = cfg.reverseProxyScheme || 'http';
             document.getElementById('cfg-host').value = cfg.reverseProxyHost || '';
             document.getElementById('cfg-port').value = cfg.reverseProxyPort || 80;
+            document.getElementById('cfg-scheme').disabled = !enabled;
             document.getElementById('cfg-host').disabled = !enabled;
             document.getElementById('cfg-port').disabled = !enabled;
             const badge = document.getElementById('mode-badge');
@@ -118,12 +132,23 @@ public static class UiPage
 
           function onProxyToggle() {
             const enabled = document.getElementById('cfg-enabled').checked;
+            document.getElementById('cfg-scheme').disabled = !enabled;
             document.getElementById('cfg-host').disabled = !enabled;
             document.getElementById('cfg-port').disabled = !enabled;
           }
 
+          function onSchemeChange() {
+            const scheme = document.getElementById('cfg-scheme').value;
+            const portEl = document.getElementById('cfg-port');
+            const defaultPort = scheme === 'https' ? 443 : 80;
+            if (portEl.value == 80 || portEl.value == 443) {
+              portEl.value = defaultPort;
+            }
+          }
+
           async function saveConfig() {
             const enabled = document.getElementById('cfg-enabled').checked;
+            const scheme = document.getElementById('cfg-scheme').value || 'http';
             const host = enabled ? document.getElementById('cfg-host').value.trim() : '';
             const port = parseInt(document.getElementById('cfg-port').value, 10) || 80;
             if (enabled && !host) { alert('Host is required when reverse proxy is enabled'); return; }
@@ -132,7 +157,7 @@ public static class UiPage
               const res = await fetch('/httpdump/config', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ reverseProxyHost: host, reverseProxyPort: port })
+                body: JSON.stringify({ reverseProxyHost: host, reverseProxyPort: port, reverseProxyScheme: scheme })
               });
               if (!res.ok) { alert('Failed to save config: ' + await res.text()); return; }
               const cfg = await res.json();
@@ -179,8 +204,18 @@ public static class UiPage
             const req = isProxy ? item.requestInfo : item.item;
             const method = safeText(req?.requestMethod ?? '?');
             const path = safeText(req?.requestPath ?? '/');
-            const qs = safeText(req?.queryStringValue ?? '');
+            const qs = safeText((req?.queryStringValue ?? '').replace(/^\?/, ''));
             const fullPath = qs ? path + '?' + qs : path;
+
+            let displayUrl = fullPath;
+            if (isProxy && currentConfig.reverseProxyHost) {
+              const scheme = currentConfig.reverseProxyScheme || 'http';
+              const port = currentConfig.reverseProxyPort;
+              const defaultPort = scheme === 'https' ? 443 : 80;
+              const portSuffix = port === defaultPort ? '' : `:${port}`;
+              displayUrl = `${scheme}://${currentConfig.reverseProxyHost}${portSuffix}${fullPath}`;
+            }
+
             const count = item.count;
             const methodClass = ['GET','POST','PUT','PATCH','DELETE'].includes(method) ? method : 'method-other';
 
@@ -196,7 +231,7 @@ public static class UiPage
             return `
               <div class="item-header">
                 <span class="method ${methodClass}">${method}</span>
-                <span class="path">${fullPath}</span>
+                <span class="path">${displayUrl}</span>
                 ${statusBadge}
                 ${countBadge}
                 <span class="chevron">▼</span>

@@ -57,7 +57,8 @@ app.Use(async (context, next) =>
             {
                 isReverseProxy = runtimeConfig.IsReverseProxy,
                 reverseProxyHost = runtimeConfig.ReverseProxyHost,
-                reverseProxyPort = runtimeConfig.ReverseProxyPort
+                reverseProxyPort = runtimeConfig.ReverseProxyPort,
+                reverseProxyScheme = runtimeConfig.ReverseProxyScheme
             }));
             return;
         }
@@ -69,6 +70,8 @@ app.Use(async (context, next) =>
                 var body = await JsonSerializer.DeserializeAsync<JsonElement>(context.Request.Body);
                 var host = body.GetProperty("reverseProxyHost").GetString()?.Trim();
                 var port = body.GetProperty("reverseProxyPort").GetInt32();
+                var scheme = body.TryGetProperty("reverseProxyScheme", out var schemeProp)
+                    ? schemeProp.GetString()?.ToLowerInvariant() : "http";
 
                 if (!string.IsNullOrEmpty(host) && (port < 1 || port > 65535))
                 {
@@ -77,7 +80,7 @@ app.Use(async (context, next) =>
                     return;
                 }
 
-                runtimeConfig.Update(string.IsNullOrEmpty(host) ? null : host, port);
+                runtimeConfig.Update(string.IsNullOrEmpty(host) ? null : host, port, scheme ?? "http");
                 await inMemoryCache.Clear();
 
                 context.Response.ContentType = "application/json";
@@ -85,7 +88,8 @@ app.Use(async (context, next) =>
                 {
                     isReverseProxy = runtimeConfig.IsReverseProxy,
                     reverseProxyHost = runtimeConfig.ReverseProxyHost,
-                    reverseProxyPort = runtimeConfig.ReverseProxyPort
+                    reverseProxyPort = runtimeConfig.ReverseProxyPort,
+                    reverseProxyScheme = runtimeConfig.ReverseProxyScheme
                 }));
             }
             catch (Exception)

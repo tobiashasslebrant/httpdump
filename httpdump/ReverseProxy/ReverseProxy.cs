@@ -19,18 +19,23 @@ public record ReverseProxy(IHttpClientFactory HttpClientFactory, AppConfig Confi
         {
             RequestUri = new UriBuilder
             {
-                Scheme = req.Scheme,
+                Scheme = Config.ReverseProxyScheme,
                 Host = Config.ReverseProxyHost,
                 Port = Config.ReverseProxyPort,
                 Path = req.PathBase.Add(req.Path),
-                Query = req.QueryString.ToString()
+                Query = req.QueryString.Value?.TrimStart('?') ?? string.Empty
             }.Uri,
             Method = new HttpMethod(req.Method),
             Content = new StreamContent(await req.Body.DeepCopy())
         };
 
         foreach (var (key, value) in req.Headers)
+        {
+            if (key.Equals("Host", StringComparison.OrdinalIgnoreCase))
+                continue;
             request.Headers.TryAddWithoutValidation(key, value.AsEnumerable());
+        }
+        request.Headers.Host = Config.ReverseProxyHost;
 
         if (!string.IsNullOrEmpty(req.ContentType))
             request.Content!.Headers.Add("Content-Type", req.ContentType);
