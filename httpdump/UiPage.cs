@@ -21,6 +21,9 @@ public static class UiPage
             .btn-primary { background: #2980b9; color: #fff; }
             label { font-size: .875rem; }
             #status { font-size: .8rem; opacity: .7; }
+            .mode-badge { font-size: .75rem; padding: .2rem .6rem; border-radius: 10px; font-weight: 600; }
+            .mode-dump  { background: #e8f4f8; color: #1a5276; }
+            .mode-proxy { background: #e9f7ef; color: #1e8449; }
             main { padding: 1.25rem; max-width: 1200px; margin: auto; }
             #config-panel { background: #fff; border: 1px solid #ddd; border-radius: 6px; padding: 1rem 1.25rem; margin-bottom: 1.25rem; }
             #config-panel h2 { margin: 0 0 .75rem; font-size: 1rem; }
@@ -63,6 +66,7 @@ public static class UiPage
         <header>
           <h1>httpdump</h1>
           <div class="toolbar">
+            <span id="mode-badge"></span>
             <span id="status"></span>
             <label><input type="checkbox" id="auto-refresh" /> Auto-refresh</label>
             <button class="btn-default" onclick="loadCache()">Refresh</button>
@@ -70,16 +74,19 @@ public static class UiPage
           </div>
         </header>
         <main>
-          <div id="config-panel" style="display:none">
-            <h2>Reverse proxy target</h2>
+          <div id="config-panel">
+            <h2>Proxy settings</h2>
             <div class="config-form">
               <div class="field">
+                <label><input type="checkbox" id="cfg-enabled" onchange="onProxyToggle()" /> Enable reverse proxy</label>
+              </div>
+              <div class="field">
                 <label for="cfg-host">Host</label>
-                <input id="cfg-host" name="host" type="text" placeholder="e.g. api.example.com" />
+                <input id="cfg-host" name="host" type="text" placeholder="e.g. api.example.com" disabled />
               </div>
               <div class="field">
                 <label for="cfg-port">Port</label>
-                <input id="cfg-port" name="port" type="number" min="1" max="65535" placeholder="80" />
+                <input id="cfg-port" name="port" type="number" min="1" max="65535" placeholder="80" disabled />
               </div>
               <button class="btn-primary" onclick="saveConfig()">Save</button>
             </div>
@@ -93,19 +100,34 @@ public static class UiPage
             try {
               const res = await fetch('/httpdump/config');
               const cfg = await res.json();
-              if (cfg.isReverseProxy) {
-                document.getElementById('config-panel').style.display = '';
-                document.getElementById('cfg-host').value = cfg.reverseProxyHost || '';
-                document.getElementById('cfg-port').value = cfg.reverseProxyPort || 80;
-              }
+              applyConfig(cfg);
             } catch (e) { /* ignore */ }
           }
 
+          function applyConfig(cfg) {
+            const enabled = cfg.isReverseProxy === true;
+            document.getElementById('cfg-enabled').checked = enabled;
+            document.getElementById('cfg-host').value = cfg.reverseProxyHost || '';
+            document.getElementById('cfg-port').value = cfg.reverseProxyPort || 80;
+            document.getElementById('cfg-host').disabled = !enabled;
+            document.getElementById('cfg-port').disabled = !enabled;
+            const badge = document.getElementById('mode-badge');
+            badge.textContent = enabled ? 'Reverse proxy' : 'Dump mode';
+            badge.className = 'mode-badge ' + (enabled ? 'mode-proxy' : 'mode-dump');
+          }
+
+          function onProxyToggle() {
+            const enabled = document.getElementById('cfg-enabled').checked;
+            document.getElementById('cfg-host').disabled = !enabled;
+            document.getElementById('cfg-port').disabled = !enabled;
+          }
+
           async function saveConfig() {
-            const host = document.getElementById('cfg-host').value.trim();
-            const port = parseInt(document.getElementById('cfg-port').value, 10);
-            if (!host) { alert('Host is required'); return; }
-            if (!port || port < 1 || port > 65535) { alert('Port must be between 1 and 65535'); return; }
+            const enabled = document.getElementById('cfg-enabled').checked;
+            const host = enabled ? document.getElementById('cfg-host').value.trim() : '';
+            const port = parseInt(document.getElementById('cfg-port').value, 10) || 80;
+            if (enabled && !host) { alert('Host is required when reverse proxy is enabled'); return; }
+            if (enabled && (port < 1 || port > 65535)) { alert('Port must be between 1 and 65535'); return; }
             try {
               const res = await fetch('/httpdump/config', {
                 method: 'POST',
@@ -113,6 +135,8 @@ public static class UiPage
                 body: JSON.stringify({ reverseProxyHost: host, reverseProxyPort: port })
               });
               if (!res.ok) { alert('Failed to save config: ' + await res.text()); return; }
+              const cfg = await res.json();
+              applyConfig(cfg);
               setStatus('Config saved');
               loadCache();
             } catch (e) { alert('Error: ' + e.message); }

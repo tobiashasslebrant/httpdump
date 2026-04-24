@@ -70,20 +70,14 @@ app.Use(async (context, next) =>
                 var host = body.GetProperty("reverseProxyHost").GetString()?.Trim();
                 var port = body.GetProperty("reverseProxyPort").GetInt32();
 
-                if (string.IsNullOrEmpty(host))
-                {
-                    context.Response.StatusCode = 400;
-                    await context.Response.WriteAsync("reverseProxyHost is required");
-                    return;
-                }
-                if (port < 1 || port > 65535)
+                if (!string.IsNullOrEmpty(host) && (port < 1 || port > 65535))
                 {
                     context.Response.StatusCode = 400;
                     await context.Response.WriteAsync("reverseProxyPort must be between 1 and 65535");
                     return;
                 }
 
-                runtimeConfig.Update(host, port);
+                runtimeConfig.Update(string.IsNullOrEmpty(host) ? null : host, port);
                 await inMemoryCache.Clear();
 
                 context.Response.ContentType = "application/json";
