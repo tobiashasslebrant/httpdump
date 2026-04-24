@@ -34,7 +34,8 @@ public record DumpHandler(RequestInfoFactory RequestInfoFactory)
             context.Response.ContentType = "application/json";
             await context.Response.WriteAsync(JsonSerializer.Serialize(_cache, new JsonSerializerOptions
             {
-                WriteIndented = true
+                WriteIndented = true,
+                PropertyNamingPolicy = JsonNamingPolicy.CamelCase
             }));
         }
 

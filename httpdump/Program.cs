@@ -1,11 +1,15 @@
 using System.Net;
+using System.Text.Json;
 using HttpDump;
 using HttpDump.Cache;
 using HttpDump.ReverseProxy;
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Services.AddTransient<DumpHandler>()
+builder.Configuration.AddEnvironmentVariables();
+
+builder.Services.AddSingleton<RuntimeConfig>()
+    .AddTransient<DumpHandler>()
     .AddTransient<ReverseProxyHandler>()
     .AddTransient<ReverseProxy>()
     .AddTransient<ResponseCacheFactory>()
@@ -16,7 +20,6 @@ builder.Services.AddTransient<DumpHandler>()
     .AddTransient<PostgresCache>()
     .AddSingleton<InMemoryResponseCache>();
 
-builder.Configuration.AddEnvironmentVariables();
 builder.Services.AddHttpClient("HttpClientWithSSLUntrusted").ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
     {
         ClientCertificateOptions = ClientCertificateOption.Manual,
@@ -29,16 +32,82 @@ builder.Services.AddControllers();
 
 var app = builder.Build();
 
-var config = app.Services.GetService<AppConfig>();
-var reverseProxyHandler = app.Services.GetService<ReverseProxyHandler>();
-var dumpHandler = app.Services.GetService<DumpHandler>();
+var runtimeConfig = app.Services.GetRequiredService<RuntimeConfig>();
+var reverseProxyHandler = app.Services.GetRequiredService<ReverseProxyHandler>();
+var dumpHandler = app.Services.GetRequiredService<DumpHandler>();
+var inMemoryCache = app.Services.GetRequiredService<InMemoryResponseCache>();
 
 app.Use(async (context, next) =>
 {
-    if (config.IsReverseProxy)
+    var path = context.Request.Path;
+
+    if (path.Equals("/httpdump/ui"))
+    {
+        context.Response.ContentType = "text/html; charset=utf-8";
+        await context.Response.WriteAsync(UiPage.Html);
+        return;
+    }
+
+    if (path.Equals("/httpdump/config"))
+    {
+        if (context.Request.Method.Equals("GET", StringComparison.OrdinalIgnoreCase))
+        {
+            context.Response.ContentType = "application/json";
+            await context.Response.WriteAsync(JsonSerializer.Serialize(new
+            {
+                isReverseProxy = runtimeConfig.IsReverseProxy,
+                reverseProxyHost = runtimeConfig.ReverseProxyHost,
+                reverseProxyPort = runtimeConfig.ReverseProxyPort
+            }));
+            return;
+        }
+
+        if (context.Request.Method.Equals("POST", StringComparison.OrdinalIgnoreCase))
+        {
+            try
+            {
+                var body = await JsonSerializer.DeserializeAsync<JsonElement>(context.Request.Body);
+                var host = body.GetProperty("reverseProxyHost").GetString()?.Trim();
+                var port = body.GetProperty("reverseProxyPort").GetInt32();
+
+                if (string.IsNullOrEmpty(host))
+                {
+                    context.Response.StatusCode = 400;
+                    await context.Response.WriteAsync("reverseProxyHost is required");
+                    return;
+                }
+                if (port < 1 || port > 65535)
+                {
+                    context.Response.StatusCode = 400;
+                    await context.Response.WriteAsync("reverseProxyPort must be between 1 and 65535");
+                    return;
+                }
+
+                runtimeConfig.Update(host, port);
+                await inMemoryCache.Clear();
+
+                context.Response.ContentType = "application/json";
+                await context.Response.WriteAsync(JsonSerializer.Serialize(new
+                {
+                    isReverseProxy = runtimeConfig.IsReverseProxy,
+                    reverseProxyHost = runtimeConfig.ReverseProxyHost,
+                    reverseProxyPort = runtimeConfig.ReverseProxyPort
+                }));
+            }
+            catch (Exception)
+            {
+                context.Response.StatusCode = 400;
+                await context.Response.WriteAsync("Invalid JSON body");
+            }
+            return;
+        }
+    }
+
+    if (runtimeConfig.IsReverseProxy)
         await reverseProxyHandler.Handle(context);
     else
         await dumpHandler.Handle(context);
+
     try
     {
         await next();
