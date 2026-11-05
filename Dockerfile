@@ -19,5 +19,9 @@ FROM base AS final
 WORKDIR /app
 COPY --from=publish /app/publish .
 ENV ASPNETCORE_URLS http://*:80
+# Optional basic auth for /httpdump* routes: enabled only when BOTH are set at runtime
+# (docker run -e / secrets). Never bake real credentials into the image.
+ENV HTTPDUMP_USER="" \
+    HTTPDUMP_PWD=""
 
 ENTRYPOINT ["dotnet", "httpdump.dll"]

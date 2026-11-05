@@ -19,7 +19,9 @@ builder.Services.AddSingleton<RuntimeConfig>()
     .AddTransient<RequestInfoFactory>()
     .AddTransient<AppConfig>()
     .AddTransient<PostgresCache>()
-    .AddSingleton<InMemoryResponseCache>();
+    .AddSingleton<InMemoryResponseCache>()
+    .AddSingleton<ResponseOverrideStore>()
+    .AddSingleton<AdminAuth>();
 
 builder.Services.AddHttpClient("HttpClientWithSSLUntrusted").ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
     {
