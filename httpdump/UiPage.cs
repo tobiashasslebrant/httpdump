@@ -33,6 +33,17 @@ public static class UiPage
             .config-form input { padding: .375rem .6rem; border: 1px solid #ccc; border-radius: 4px; font-size: .875rem; width: 220px; }
             .config-form select { padding: .375rem .6rem; border: 1px solid #ccc; border-radius: 4px; font-size: .875rem; background: #fff; }
             .config-form input[name=port] { width: 90px; }
+            #override-panel { background: #fff; border: 1px solid #ddd; border-radius: 6px; padding: 1rem 1.25rem; margin-bottom: 1.25rem; }
+            #override-panel h2 { margin: 0 0 .75rem; font-size: 1rem; }
+            #override-list { display: flex; flex-direction: column; gap: .4rem; margin-bottom: .75rem; }
+            .override-row { display: flex; align-items: center; gap: .6rem; padding: .4rem .6rem; border: 1px solid #eee; border-radius: 4px; font-size: .85rem; }
+            .override-row .path { flex: 1; }
+            .override-row .sub { color: #888; font-size: .75rem; }
+            .btn-small { padding: .2rem .55rem; font-size: .75rem; }
+            #override-json { width: 100%; height: 11rem; font-family: monospace; font-size: .8rem; padding: .5rem; border: 1px solid #ccc; border-radius: 4px; }
+            .override-actions { display: flex; align-items: center; gap: .75rem; margin-top: .5rem; }
+            #override-msg { font-size: .8rem; color: #c0392b; }
+            details > summary { cursor: pointer; font-size: .85rem; color: #2980b9; }
             #items { display: flex; flex-direction: column; gap: .5rem; }
             .empty { color: #888; text-align: center; padding: 2rem; background: #fff; border-radius: 6px; border: 1px solid #eee; }
             .item { background: #fff; border: 1px solid #ddd; border-radius: 6px; overflow: hidden; }
@@ -102,6 +113,20 @@ public static class UiPage
                 <label><input type="checkbox" id="cfg-cache" checked disabled />Cache responses</label>
               </div>
             </div>
+          </div>
+          <div id="override-panel">
+            <h2>Response overrides</h2>
+            <div id="override-list"><p class="empty">No overrides</p></div>
+            <details id="override-details">
+              <summary id="override-summary">Add override</summary>
+              <p class="sub" style="font-size:.8rem;color:#666">Matching requests get this response instead of dump/proxy handling. <code>*</code> matches any characters; empty fields match anything.</p>
+              <textarea id="override-json" spellcheck="false"></textarea>
+              <div class="override-actions">
+                <button class="btn-primary" id="override-save" onclick="saveOverride()">Add override</button>
+                <button class="btn-default" id="override-cancel" onclick="cancelEdit()" style="display:none">Cancel edit</button>
+                <span id="override-msg"></span>
+              </div>
+            </details>
           </div>
           <div id="items"><p class="empty">Loading…</p></div>
         </main>
@@ -175,7 +200,113 @@ public static class UiPage
             } catch (e) { alert('Error: ' + e.message); }
           }
 
+          const overrideTemplate = {
+            name: '',
+            request: { match: { method: '', protocol: 'http', baseUrl: '', relativeUrl: 'users/*',
+              queryParameters: [{ key: 'name', value: '*' }], ignoreQueryParameters: false, headers: [{ key: 'X-Env', value: '*' }], body: '' } },
+            response: { statusCode: 200, headers: [{ key: 'Content-Type', value: 'application/json' }], body: '{"ok":true}' }
+          };
+          document.getElementById('override-json').value = JSON.stringify(overrideTemplate, null, 2);
+
+          async function loadOverrides() {
+            try {
+              const res = await fetch('/httpdump/response');
+              renderOverrides(await res.json());
+            } catch (e) { /* ignore */ }
+          }
+
+          function renderOverrides(items) {
+            const list = document.getElementById('override-list');
+            list.innerHTML = '';
+            if (!items || items.length === 0) {
+              list.innerHTML = '<p class="empty">No overrides</p>';
+              return;
+            }
+            items.forEach(o => {
+              const code = o.response?.statusCode ?? 200;
+              const cls = code >= 500 ? 'status-5xx' : code >= 400 ? 'status-4xx' : code >= 300 ? 'status-3xx' : 'status-2xx';
+              const row = document.createElement('div');
+              row.className = 'override-row';
+
+              const m = document.createElement('span');
+              const method = o.request?.match?.method || '*';
+              m.className = 'method ' + (['GET','POST','PUT','PATCH','DELETE'].includes(method) ? method : 'method-other');
+              m.textContent = method;
+
+              const name = document.createElement('span');
+              name.className = 'path';
+              name.textContent = o.name;
+              name.title = JSON.stringify(o, null, 2);
+
+              const st = document.createElement('span');
+              st.className = 'status-code ' + cls;
+              st.textContent = code;
+
+              const edit = document.createElement('button');
+              edit.className = 'btn-default btn-small';
+              edit.textContent = 'Edit';
+              edit.addEventListener('click', () => startEdit(o));
+
+              const del = document.createElement('button');
+              del.className = 'btn-danger btn-small';
+              del.textContent = 'Delete';
+              del.addEventListener('click', () => deleteOverride(o.id));
+
+              row.append(m, name, st, edit, del);
+              list.appendChild(row);
+            });
+          }
+
+          let editingId = null;
+
+          function setEditMode(id) {
+            editingId = id;
+            document.getElementById('override-save').textContent = id ? 'Save changes' : 'Add override';
+            document.getElementById('override-summary').textContent = id ? 'Edit override' : 'Add override';
+            document.getElementById('override-cancel').style.display = id ? '' : 'none';
+          }
+
+          function startEdit(o) {
+            const { id, ...rest } = o;
+            document.getElementById('override-json').value = JSON.stringify(rest, null, 2);
+            document.getElementById('override-msg').textContent = '';
+            setEditMode(id);
+            const d = document.getElementById('override-details');
+            d.open = true;
+            d.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          }
+
+          function cancelEdit() {
+            document.getElementById('override-json').value = JSON.stringify(overrideTemplate, null, 2);
+            document.getElementById('override-msg').textContent = '';
+            setEditMode(null);
+          }
+
+          async function saveOverride() {
+            const msg = document.getElementById('override-msg');
+            msg.textContent = '';
+            let payload;
+            try { payload = JSON.parse(document.getElementById('override-json').value); }
+            catch (e) { msg.textContent = 'Invalid JSON: ' + e.message; return; }
+            const res = await fetch('/httpdump/response' + (editingId ? '/' + encodeURIComponent(editingId) : ''), {
+              method: editingId ? 'PUT' : 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(payload)
+            });
+            if (!res.ok) { msg.textContent = 'Failed: ' + await res.text(); return; }
+            setStatus(editingId ? 'Override updated' : 'Override added');
+            if (editingId) cancelEdit();
+            loadOverrides();
+          }
+
+          async function deleteOverride(id) {
+            await fetch('/httpdump/response/' + encodeURIComponent(id), { method: 'DELETE' });
+            if (editingId === id) cancelEdit();
+            loadOverrides();
+          }
+
           async function loadCache() {
+            loadOverrides();
             try {
               const res = await fetch('/httpdump/cache');
               const items = await res.json();

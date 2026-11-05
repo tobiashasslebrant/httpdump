@@ -1,0 +1,34 @@
+{
+  "name": "",
+  "request": {
+    "match": {
+      "protocol": "http",
+      "baseUrl": "mydomain.com",
+      "relativeUrl": "users/*",
+      "queryParameters": [
+        {
+          "key": "name",
+          "value": "*"
+        }
+      ],
+      "ignoreQueryParameters": false,
+      "headers": [
+        {
+          "key": "",
+          "value": ""
+        }
+      ],
+      "body": ""
+    }
+  },
+  "response": {
+    "statusCode": 200,
+    "headers": [
+      {
+        "key": "",
+        "value": ""
+      }
+    ],
+    "body": ""
+  }
+}

@@ -2,6 +2,7 @@ using System.Net;
 using System.Text.Json;
 using HttpDump;
 using HttpDump.Cache;
+using HttpDump.Models;
 using HttpDump.ReverseProxy;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -124,6 +125,96 @@ app.Use(async (context, next) =>
                 context.Response.StatusCode = 400;
                 await context.Response.WriteAsync("Invalid JSON body");
             }
+            return;
+        }
+    }
+
+    if (path.StartsWithSegments("/httpdump/response", out var remaining))
+    {
+        var method = context.Request.Method;
+        var id = remaining.Value?.Trim('/');
+
+        if (string.IsNullOrEmpty(id) && HttpMethods.IsGet(method))
+        {
+            await context.Response.WriteAsJsonAsync(overrides.All(), jsonOptions);
+            return;
+        }
+
+        if (string.IsNullOrEmpty(id) && HttpMethods.IsPost(method))
+        {
+            try
+            {
+                var set = await JsonSerializer.DeserializeAsync<SetResponseRequest>(context.Request.Body, jsonOptions);
+                if (set?.Request?.Match is null || set.Response is null)
+                {
+                    context.Response.StatusCode = 400;
+                    await context.Response.WriteAsync("'request.match' and 'response' are required");
+                    return;
+                }
+
+                var created = overrides.Add(set.Name, set.Request, set.Response);
+                context.Response.StatusCode = 201;
+                await context.Response.WriteAsJsonAsync(created, jsonOptions);
+            }
+            catch (JsonException)
+            {
+                context.Response.StatusCode = 400;
+                await context.Response.WriteAsync("Invalid JSON body");
+            }
+            return;
+        }
+
+        if (!string.IsNullOrEmpty(id) && HttpMethods.IsPut(method))
+        {
+            try
+            {
+                var set = await JsonSerializer.DeserializeAsync<SetResponseRequest>(context.Request.Body, jsonOptions);
+                if (set?.Request?.Match is null || set.Response is null)
+                {
+                    context.Response.StatusCode = 400;
+                    await context.Response.WriteAsync("'request.match' and 'response' are required");
+                    return;
+                }
+
+                var updated = overrides.Replace(id, set.Name, set.Request, set.Response);
+                if (updated is null)
+                    context.Response.StatusCode = 404;
+                else
+                    await context.Response.WriteAsJsonAsync(updated, jsonOptions);
+            }
+            catch (JsonException)
+            {
+                context.Response.StatusCode = 400;
+                await context.Response.WriteAsync("Invalid JSON body");
+            }
+            return;
+        }
+
+        if (!string.IsNullOrEmpty(id) && HttpMethods.IsDelete(method))
+        {
+            context.Response.StatusCode = overrides.Remove(id) ? 204 : 404;
+            return;
+        }
+
+        context.Response.StatusCode = 405;
+        return;
+    }
+
+    if (!path.StartsWithSegments("/httpdump"))
+    {
+        var body = overrides.NeedsBody() ? await ResponseOverrideStore.ReadBody(context.Request) : "";
+        var match = overrides.Find(context.Request, body);
+        if (match is not null)
+        {
+            context.Response.StatusCode = match.Response.StatusCode;
+            foreach (var h in match.Response.Headers ?? [])
+            {
+                if (h.Key.Equals("Content-Type", StringComparison.OrdinalIgnoreCase))
+                    context.Response.ContentType = h.Value;
+                else
+                    context.Response.Headers[h.Key] = h.Value;
+            }
+            await context.Response.WriteAsync(match.Response.Body ?? "");
             return;
         }
     }
