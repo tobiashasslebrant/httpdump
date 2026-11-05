@@ -36,10 +36,34 @@ var runtimeConfig = app.Services.GetRequiredService<RuntimeConfig>();
 var reverseProxyHandler = app.Services.GetRequiredService<ReverseProxyHandler>();
 var dumpHandler = app.Services.GetRequiredService<DumpHandler>();
 var inMemoryCache = app.Services.GetRequiredService<InMemoryResponseCache>();
+var overrides = app.Services.GetRequiredService<ResponseOverrideStore>();
+var adminAuth = app.Services.GetRequiredService<AdminAuth>();
+if (!adminAuth.Enabled)
+    app.Logger.LogWarning("HTTPDUMP_USER/HTTPDUMP_PWD not both set: /httpdump routes are NOT protected");
+var jsonOptions = new JsonSerializerOptions(JsonSerializerDefaults.Web)
+{
+    AllowTrailingCommas = true,
+    ReadCommentHandling = JsonCommentHandling.Skip,
+    WriteIndented = true
+};
 
 app.Use(async (context, next) =>
 {
     var path = context.Request.Path;
+    if (path.StartsWithSegments("/httpdump") && !adminAuth.IsAuthorized(context.Request))
+    {
+        AdminAuth.Challenge(context.Response);
+        return;
+    }
+
+    context.Request.EnableBuffering(); // body is read more than once (hashing, override matching, proxying)
+
+    if ((path.Equals("/httpdump") || path.Equals("/httpdump/")) && HttpMethods.IsGet(context.Request.Method))
+    {
+        context.Response.ContentType = "text/html; charset=utf-8";
+        await context.Response.WriteAsync(HelpPage.Html);
+        return;
+    }
 
     if (path.Equals("/httpdump/ui"))
     {

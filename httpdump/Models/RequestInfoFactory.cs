@@ -16,7 +16,7 @@ public class RequestInfoFactory
             request.Headers.Keys.Select(key => new
             {
                 key, 
-                values=request.Headers[key].ToArray()
+                values=request.Headers[key].Select(v => v!).ToArray()
             }).ToDictionary(k => k.key, s => s.values),
             await sr.ReadToEndAsync());
     }
